@@ -3,6 +3,7 @@ from sklearn.cluster import KMeans
 import urllib.request as urllib2
 import os
 import colorthief
+import database as db
 
 def extract_color_palette_and_dominant(image_path):
     color_thief = colorthief.ColorThief(image_path)
@@ -103,6 +104,7 @@ def classify_color(rgb)->str:
 def retrieve_chromatic_order_from_spotify_data(spotify_data: dict) -> list:
     new_items = []
     diccionario_temporal = {}
+    database = db.MusicDatabase()
     for item in spotify_data["items"]:
         position = -1
         # buscar posicion del album en el diccionario
@@ -110,30 +112,35 @@ def retrieve_chromatic_order_from_spotify_data(spotify_data: dict) -> list:
             position = diccionario_temporal[item["album"]["id"]]
         else:
             diccionario_temporal[item["album"]["id"]] = len(new_items)
-
         if position == -1:
+            chromatic_info=database.get_document_by_id(item["album"]["id"])
             new_item = {}
             image_url = item["album"]["images"][0]["url"]
             image_path = "./imageCache/" + item["id"] + ".jpg"
             if not os.path.isfile(image_path):
                 urllib2.urlretrieve(image_url, image_path)
-            color_palette_dominant = extract_color_palette_and_dominant(image_path)
+            if chromatic_info is None:
+                color_palette_dominant = extract_color_palette_and_dominant(image_path)
+                colorfuness = retrieve_hue(color_palette_dominant[1])
+                database.create_document(item["album"]["id"], color_palette_dominant[1], color_palette_dominant[0], colorfuness)
+            else:
+                color_palette_dominant = chromatic_info["palette_colors"], chromatic_info["dominant_color"]
+                colorfuness = chromatic_info["colorfulness"]
             new_item["album"] = item["album"]["name"]
             new_item["image"] = item["album"]["images"][0]["url"]
             new_item["colors"] = color_palette_dominant[0]
             new_item["dominant"] = color_palette_dominant[1]
             new_item["color_names"] = [classify_color(color) for color in color_palette_dominant[0]]
-            new_item["colorfulness"] = retrieve_hue(color_palette_dominant[1])
+            new_item["colorfulness"] = colorfuness
             new_items.append(new_item)
             position = diccionario_temporal[item["album"]["id"]]
-            new_item = new_items[position]
-            lista_canciones = new_item.get("songs", [])
-            lista_canciones.append({"name": item["name"], "artists": ", ".join([artist["name"] for artist in item["artists"]])})
-            new_item["songs"] = lista_canciones
+        new_item = new_items[position]
+        lista_canciones = new_item.get("songs", [])
+        lista_canciones.append({"name": item["name"], "artists": ", ".join([artist["name"] for artist in item["artists"]])})
+        new_item["songs"] = lista_canciones
 
     # Sort new_items based on the chromatic order (colorfulness of dominant color)
     new_items.sort(key=lambda x: x["colorfulness"])
-
 
     return new_items
 

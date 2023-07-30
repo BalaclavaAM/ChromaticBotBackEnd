@@ -1,4 +1,5 @@
 import logging
+
 from spotipy import CacheHandler
 
 class FlaskSessionCacheHandler(CacheHandler):
