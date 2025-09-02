@@ -1,5 +1,4 @@
 import numpy as np
-from sklearn.cluster import KMeans
 import urllib.request as urllib2
 import os
 import colorthief
@@ -117,6 +116,10 @@ def retrieve_chromatic_order_from_spotify_data(spotify_data: dict) -> list:
             new_item = {}
             image_url = item["album"]["images"][0]["url"]
             image_path = "./imageCache/" + item["id"] + ".jpg"
+            
+            # Create imageCache directory if it doesn't exist
+            os.makedirs("./imageCache", exist_ok=True)
+            
             if not os.path.isfile(image_path):
                 urllib2.urlretrieve(image_url, image_path)
             if chromatic_info is None:
