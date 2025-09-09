@@ -123,8 +123,10 @@ def retrieve_chromatic_order_from_spotify_data(spotify_data: dict) -> list:
             if not os.path.isfile(image_path):
                 urllib2.urlretrieve(image_url, image_path)
             if chromatic_info is None:
+                # Extract colors from image (no cache available or not found in cache)
                 color_palette_dominant = extract_color_palette_and_dominant(image_path)
                 colorfuness = retrieve_hue(color_palette_dominant[1])
+                # Try to save to cache (will be ignored if DB not available)
                 database.create_document(item["album"]["id"], color_palette_dominant[1], color_palette_dominant[0], colorfuness)
             else:
                 color_palette_dominant = chromatic_info["palette_colors"], chromatic_info["dominant_color"]

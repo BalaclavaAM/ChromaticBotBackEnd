@@ -17,7 +17,17 @@ import json
 
 print(os.environ.get("SPOTIPY_CLIENT_ID"))
 
-db.MusicDatabase(os.environ.get("DB_URL"), os.environ.get("DB_NAME"), os.environ.get("DB_COLLECTION"))
+# Initialize database only if MongoDB variables are provided
+db_url = os.environ.get("DB_URL")
+db_name = os.environ.get("DB_NAME") 
+db_collection = os.environ.get("DB_COLLECTION")
+
+if db_url and db_name and db_collection:
+    print("Initializing MongoDB connection...")
+    db.MusicDatabase(db_url, db_name, db_collection)
+else:
+    print("MongoDB variables not provided - initializing without cache")
+    db.MusicDatabase(None, None, None)
 
 app = Flask(__name__)
 
@@ -44,6 +54,11 @@ def get_albums_by_chromaticity():
     top_50_songs = sac.get_top_50(access_token, time_revision, quantity_songs)
     xd=cl.retrieve_chromatic_order_from_spotify_data(top_50_songs)
     return Response(json.dumps(xd), status=200, mimetype="application/json")
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    return Response(json.dumps({"status": "healthy", "service": "ChromaticBotBackEnd"}), 
+                   status=200, mimetype="application/json")
 
 if __name__ == "__main__":
     app.run(debug=True)
