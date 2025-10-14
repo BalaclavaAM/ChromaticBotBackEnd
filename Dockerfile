@@ -26,12 +26,14 @@ COPY . .
 # Create imageCache directory
 RUN mkdir -p imageCache
 
-# Expose port 5000 (Flask default)
-EXPOSE 5000
+# Expose port 8080
+EXPOSE 8080
 
 # Set environment variables
 ENV FLASK_APP=main.py
+ENV FLASK_RUN_HOST=0.0.0.0
+ENV FLASK_RUN_PORT=8080
 ENV FLASK_ENV=production
 
 # Run the application
-CMD ["python", "main.py"]
+CMD ["flask", "run"]
