@@ -1,5 +1,7 @@
 from pymongo import MongoClient
 
+print("Loading database module")
+
 class MusicDatabase:
     _instance = None
 
