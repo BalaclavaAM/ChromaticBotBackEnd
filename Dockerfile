@@ -26,6 +26,9 @@ COPY pyproject.toml pdm.lock* ./
 # --no-editable installs packages in non-editable mode
 RUN pdm install --prod --no-lock --no-editable
 
+# Add PDM's bin directory to PATH
+ENV PATH="/app/.venv/bin:$PATH"
+
 # Copy application code
 COPY . .
 
@@ -39,6 +42,5 @@ EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
 ENV PDM_PYTHON=/usr/local/bin/python
 
-# Run the application with Uvicorn
-# Use pdm run to ensure correct Python environment
-CMD ["pdm", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run the application with Uvicorn directly
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
