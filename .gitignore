@@ -105,7 +105,14 @@ ipython_config.py
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
+# PDM
+#   pdm.lock should be committed to version control for reproducible builds
+#   https://pdm-project.org/latest/usage/lock-file/
+.pdm-python
+.pdm.toml
+.pdm-build/
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and PDM
 __pypackages__/
 
 # Celery stuff
@@ -154,3 +161,4 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+.DS_Store

@@ -1,0 +1,1 @@
+"""FastAPI ChromaticBot Backend Application"""

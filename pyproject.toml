@@ -1,0 +1,32 @@
+[project]
+name = "ChromaticBotBackEnd"
+version = "0.1.0"
+description = "FastAPI backend for sorting Spotify albums by chromatic analysis"
+authors = [
+    {name = "JuanMa", email = "68751794+BalaclavaAM@users.noreply.github.com"},
+]
+dependencies = [
+    "fastapi>=0.121.0",
+    "uvicorn[standard]>=0.38.0",
+    "pydantic>=2.12.3",
+    "pydantic-settings>=2.11.0",
+    "requests>=2.32.5",
+    "python-dotenv>=1.2.1",
+    "pymongo>=4.15.3",
+    "spotipy>=2.25.1",
+    "pillow>=12.0.0",
+    "colorthief>=0.2.1",
+    "numpy>=2.3.4",
+]
+requires-python = ">=3.12"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false
+
+[tool.pdm.scripts]
+start = "uvicorn app.main:app --reload --host 0.0.0.0 --port 8080"
+prod = "uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 4"
+dev = "uvicorn app.main:app --reload"
