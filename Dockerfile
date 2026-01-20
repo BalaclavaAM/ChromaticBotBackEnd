@@ -24,7 +24,7 @@ COPY pyproject.toml pdm.lock* ./
 # --prod flag installs only production dependencies
 # --no-lock skips lock file update
 # --no-editable installs packages in non-editable mode
-RUN pdm install --prod --no-lock --no-editable
+RUN pdm install --prod --no-lock --no-editableadsasdas
 
 # Add PDM's bin directory to PATH
 ENV PATH="/app/.venv/bin:$PATH"
