@@ -54,3 +54,6 @@ logs/
 
 # Cache
 imageCache/
+
+# PDM virtualenv
+.venv/

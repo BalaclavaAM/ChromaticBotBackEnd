@@ -1,7 +1,10 @@
 """Spotify API consumer service"""
-from requests import get, exceptions
+import logging
+
+import httpx
 from fastapi import HTTPException
 
+logger = logging.getLogger(__name__)
 
 TIME_RANGES = {
     "1m": "short_term",
@@ -9,15 +12,23 @@ TIME_RANGES = {
     "a": "long_term"
 }
 
+TOP_TRACKS_URL = "https://api.spotify.com/v1/me/top/tracks"
+
 
 class SpotifyAPIService:
     """Service for consuming Spotify API"""
 
     @staticmethod
-    def get_top_tracks(access_token: str, time_revision: str, quantity_songs: int) -> dict:
+    async def get_top_tracks(
+        http_client: httpx.AsyncClient,
+        access_token: str,
+        time_revision: str,
+        quantity_songs: int
+    ) -> dict:
         """Get user's top tracks from Spotify
 
         Args:
+            http_client: Shared async HTTP client
             access_token: Spotify access token
             time_revision: Time period ('1m', '6m', or 'a')
             quantity_songs: Number of songs to retrieve
@@ -28,42 +39,24 @@ class SpotifyAPIService:
         Raises:
             HTTPException: If access token is invalid or API request fails
         """
-        if time_revision not in TIME_RANGES:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid time revision. Must be one of: {list(TIME_RANGES.keys())}"
-            )
-
-        headers = {
-            "Authorization": f"Bearer {access_token}"
-        }
-
         try:
-            response = get(
-                f"https://api.spotify.com/v1/me/top/tracks",
-                headers=headers,
+            response = await http_client.get(
+                TOP_TRACKS_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
                 params={
                     "limit": quantity_songs,
                     "time_range": TIME_RANGES[time_revision]
-                },
-                timeout=10
+                }
             )
+        except httpx.HTTPError:
+            logger.exception("Failed to connect to Spotify API")
+            raise HTTPException(status_code=503, detail="Failed to connect to Spotify API")
 
-            if response.status_code == 401:
-                raise HTTPException(status_code=401, detail="Invalid or expired access token")
+        if response.status_code == 401:
+            raise HTTPException(status_code=401, detail="Invalid or expired access token")
 
-            if response.status_code != 200:
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=f"Spotify API error: {response.text}"
-                )
+        if response.status_code != 200:
+            logger.error("Spotify API error %s: %s", response.status_code, response.text)
+            raise HTTPException(status_code=502, detail="Spotify API request failed")
 
-            data = response.json()
-
-            if "error" in data:
-                raise HTTPException(status_code=400, detail=f"Spotify API error: {data['error']}")
-
-            return data
-
-        except exceptions.RequestException as e:
-            raise HTTPException(status_code=503, detail=f"Failed to connect to Spotify API: {str(e)}")
+        return response.json()

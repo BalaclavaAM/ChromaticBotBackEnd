@@ -1,46 +1,32 @@
-# Use Python 3.12 slim image as base
-FROM python:3.12-slim
+# Stage 1: install production dependencies with PDM
+FROM python:3.12-slim AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies for image processing and PDM
-RUN apt-get update && apt-get install -y \
-    libgl1-mesa-dri \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
-    libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install PDM
 RUN pip install --no-cache-dir pdm
 
-# Copy dependency files first for better caching
-COPY pyproject.toml pdm.lock* ./
+COPY pyproject.toml pdm.lock ./
+RUN pdm install --check --prod --no-editable
 
-# Install dependencies using PDM
-# --prod flag installs only production dependencies
-# --no-lock skips lock file update
-# --no-editable installs packages in non-editable mode
-RUN pdm install --prod --no-lock --no-editable
+# Stage 2: runtime
+FROM python:3.12-slim
 
-# Add PDM's bin directory to PATH
-ENV PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
 
-# Copy application code
-COPY . .
+RUN groupadd --system app && useradd --system --gid app app
 
-# Create imageCache directory
-RUN mkdir -p imageCache
+COPY --from=builder /app/.venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1
 
-# Expose port 8080
+COPY app ./app
+
+USER app
+
 EXPOSE 8080
 
-# Set environment variables
-ENV PYTHONUNBUFFERED=1
-ENV PDM_PYTHON=/usr/local/bin/python
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
 
-# Run the application with Uvicorn directly
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
+# 2 workers: acorde a contenedores de ~512MB; subir junto con la memoria
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]

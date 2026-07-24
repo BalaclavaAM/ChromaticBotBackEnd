@@ -30,6 +30,7 @@ En la sección **Environment Variables**, agrega las siguientes variables:
 
 ```bash
 # CORS - URL del frontend (actualizarás esto después de desplegar el frontend)
+# Admite varios orígenes separados por comas
 CLIENT_ORIGIN=https://your-frontend-url.northflank.app
 
 # Base de datos MongoDB (opcional - solo si usas caché)
@@ -41,17 +42,14 @@ DB_COLLECTION=albums
 #### Variables Opcionales:
 
 ```bash
-# Python
-PYTHONUNBUFFERED=1
-
-# Logging
+# Logging (debug, info, warning, error)
 LOG_LEVEL=info
 ```
 
 ### 1.3 Configurar el Build
 
 - **Build Command**: (automático, usa el Dockerfile)
-- **Start Command**: `pdm run uvicorn app.main:app --host 0.0.0.0 --port 8080`
+- **Start Command**: (automático, usa el CMD del Dockerfile: uvicorn con 2 workers en el puerto 8080)
 
 ### 1.4 Desplegar
 
@@ -67,22 +65,11 @@ Visita `https://tu-backend-url.northflank.app/docs` para ver la documentación i
 
 ## Parte 2: Desplegar el Frontend (Angular)
 
-### 2.1 Actualizar la URL del Backend
+### 2.1 Crear el Servicio en Northflank
 
-Antes de desplegar el frontend, necesitas actualizar la URL del backend en el código:
-
-**Archivo**: `src/environments/environment.prod.ts`
-
-```typescript
-export const environment = {
-  production: true,
-  apiBaseUrl: 'https://tu-backend-url.northflank.app'  // ← Actualiza con tu URL
-};
-```
-
-**Commit y push** estos cambios a tu repositorio.
-
-### 2.2 Crear el Servicio en Northflank
+La URL del backend ya **no** se configura en el código: el contenedor la lee
+en runtime de la variable de entorno `API_BASE_URL` y genera
+`assets/config.json` al arrancar. La misma imagen sirve para cualquier entorno.
 
 1. En Northflank, click en **"Create Service"** → **"Build service"**
 2. Selecciona tu repositorio de GitHub del frontend
@@ -91,10 +78,17 @@ export const environment = {
    - **Dockerfile path**: `Dockerfile`
    - **Port**: `80`
 
+### 2.2 Configurar Variables de Entorno
+
+```bash
+# URL pública del backend (la que copiaste en el paso 1.4)
+API_BASE_URL=https://tu-backend-url.northflank.app
+```
+
 ### 2.3 Configurar el Build
 
 - **Build Command**: (automático, usa el Dockerfile)
-- **Start Command**: `nginx -g 'daemon off;'`
+- **Start Command**: (automático, el entrypoint de nginx genera la config y arranca)
 
 ### 2.4 Desplegar
 
@@ -205,7 +199,7 @@ DB_COLLECTION=albums
 
 **Solución Backend**:
 - Verifica que `pyproject.toml` y `pdm.lock` estén en el repositorio
-- Asegúrate de que el Dockerfile use `pdm install --prod --no-lock`
+- Asegúrate de que el Dockerfile use `pdm install --check --prod --no-editable`
 
 **Solución Frontend**:
 - Verifica que `package.json` y `package-lock.json` estén en el repositorio
@@ -287,7 +281,7 @@ Antes de considerar el despliegue completo:
 - [ ] Backend desplegado y funcionando
 - [ ] Frontend desplegado y funcionando
 - [ ] `CLIENT_ORIGIN` configurado correctamente en el backend
-- [ ] `apiBaseUrl` configurado correctamente en el frontend
+- [ ] `API_BASE_URL` configurado correctamente en el frontend
 - [ ] Spotify Redirect URI actualizado
 - [ ] Login con Spotify funciona
 - [ ] Requests al backend funcionan (sin errores de CORS)

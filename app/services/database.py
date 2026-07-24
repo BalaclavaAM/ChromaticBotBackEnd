@@ -1,140 +1,85 @@
-"""MongoDB database service with dependency injection"""
-from pymongo import MongoClient
-from pymongo.database import Database
+"""MongoDB cache service backed by a single client managed by the app lifespan"""
+import logging
+from typing import Any
+
+from pymongo import MongoClient, UpdateOne
 from pymongo.collection import Collection
-from os import environ
+from pymongo.errors import PyMongoError
+
+logger = logging.getLogger(__name__)
+
+
+def create_mongo_client(db_url: str, timeout_ms: int = 2000) -> MongoClient | None:
+    """Create a MongoClient and verify the server is reachable
+
+    Args:
+        db_url: MongoDB connection URL
+        timeout_ms: Server selection timeout in milliseconds
+
+    Returns:
+        Connected MongoClient, or None if the server is unreachable
+    """
+    client: MongoClient = MongoClient(db_url, serverSelectionTimeoutMS=timeout_ms)
+    try:
+        client.admin.command("ping")
+        return client
+    except PyMongoError:
+        logger.exception("MongoDB unreachable - running without cache")
+        client.close()
+        return None
 
 
 class MusicDatabase:
-    """MongoDB service for storing album chromatic information"""
+    """Cache of album chromatic information
 
-    def __init__(self, db_url: str | None = None, db_name: str | None = None, collection_name: str | None = None):
-        """Initialize MongoDB connection
-
-        Args:
-            db_url: MongoDB connection URL
-            db_name: Database name
-            collection_name: Collection name
-        """
-        # Check if MongoDB configuration is provided
-        if db_url and db_name and collection_name:
-            try:
-                self.client: MongoClient = MongoClient(db_url)
-                self.db: Database = self.client[db_name]
-                self.collection: Collection = self.db[collection_name]
-                self.enabled = True
-                print("MongoDB connection established successfully")
-            except Exception as e:
-                print(f"MongoDB connection failed: {e}")
-                self.enabled = False
-                self.client = None
-                self.db = None
-                self.collection = None
-        else:
-            print("MongoDB configuration not provided - running without cache")
-            self.enabled = False
-            self.client = None
-            self.db = None
-            self.collection = None
-
-    def create_document(self, id_album: str, dominant_color: tuple, palette_colors: list, colorfulness: float) -> str | None:
-        """Create a new document in the collection
-
-        Args:
-            id_album: Album ID
-            dominant_color: Dominant color RGB tuple
-            palette_colors: List of palette colors
-            colorfulness: Colorfulness metric
-
-        Returns:
-            Inserted document ID or None if DB not enabled
-        """
-        if not self.enabled:
-            return None
-
-        document = {
-            "id_album": id_album,
-            "dominant_color": dominant_color,
-            "palette_colors": palette_colors,
-            "colorfulness": colorfulness
-        }
-
-        result = self.collection.insert_one(document)
-        return str(result.inserted_id)
-
-    def get_document_by_id(self, id_album: str) -> dict[str, any] | None:
-        """Find a document by album ID
-
-        Args:
-            id_album: Album ID to search for
-
-        Returns:
-            Document dict or None if not found or DB not enabled
-        """
-        if not self.enabled:
-            return None
-
-        document = self.collection.find_one({"id_album": id_album})
-        return document
-
-    def get_all_documents(self) -> list[dict[str, any]]:
-        """Get all documents from the collection
-
-        Returns:
-            List of all documents, empty list if DB not enabled
-        """
-        if not self.enabled:
-            return []
-
-        documents = list(self.collection.find())
-        return documents
-
-    def delete_document_by_id(self, id_album: str) -> int:
-        """Delete a document by album ID
-
-        Args:
-            id_album: Album ID to delete
-
-        Returns:
-            Number of deleted documents (0 or 1)
-        """
-        if not self.enabled:
-            return 0
-
-        result = self.collection.delete_one({"id_album": id_album})
-        return result.deleted_count
-
-    def update_document(self, id_album: str, updates: dict[str, any]) -> int:
-        """Update a document by album ID
-
-        Args:
-            id_album: Album ID to update
-            updates: Dictionary of fields to update
-
-        Returns:
-            Number of modified documents
-        """
-        if not self.enabled:
-            return 0
-
-        result = self.collection.update_one({"id_album": id_album}, {"$set": updates})
-        return result.modified_count
-
-    def close(self):
-        """Close MongoDB connection"""
-        if self.client:
-            self.client.close()
-
-
-# Dependency to get database instance
-def get_database() -> MusicDatabase:
-    """FastAPI dependency to get database instance
-
-    Returns:
-        MusicDatabase instance configured from environment variables
+    Every operation degrades to a no-op when the cache is disabled or the
+    database fails: a cache problem must never break a request.
     """
-    db_url = environ.get("DB_URL")
-    db_name = environ.get("DB_NAME")
-    db_collection = environ.get("DB_COLLECTION")
 
-    return MusicDatabase(db_url, db_name, db_collection)
+    def __init__(self, collection: Collection | None):
+        self.collection = collection
+        self.enabled = collection is not None
+
+    def ensure_indexes(self) -> None:
+        """Create the unique index on id_album used by lookups and upserts"""
+        if not self.enabled:
+            return
+        try:
+            self.collection.create_index("id_album", unique=True)
+        except PyMongoError:
+            logger.exception("Failed to create cache index")
+
+    def get_documents_by_ids(self, album_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Fetch cached documents for the given album IDs in a single query
+
+        Args:
+            album_ids: Album IDs to look up
+
+        Returns:
+            Mapping of album ID to cached document (missing IDs are absent)
+        """
+        if not self.enabled or not album_ids:
+            return {}
+        try:
+            cursor = self.collection.find({"id_album": {"$in": album_ids}})
+            return {doc["id_album"]: doc for doc in cursor}
+        except PyMongoError:
+            logger.exception("Cache read failed - continuing without cache")
+            return {}
+
+    def upsert_documents(self, documents: list[dict[str, Any]]) -> None:
+        """Upsert cached documents keyed by id_album
+
+        Args:
+            documents: Documents to store; each must contain "id_album"
+        """
+        if not self.enabled or not documents:
+            return
+        try:
+            operations = [
+                UpdateOne({"id_album": doc["id_album"]}, {"$set": doc}, upsert=True)
+                for doc in documents
+            ]
+            self.collection.bulk_write(operations, ordered=False)
+        except PyMongoError:
+            logger.exception("Cache write failed - continuing without cache")
